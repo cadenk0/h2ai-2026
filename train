@@ -1,0 +1,82 @@
+import pandas as pd
+import numpy as np
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report, accuracy_score
+
+# 1. Simulate 14-Day Trajectories based on historical data
+np.random.seed(42)
+n_patients = 200
+days = 14
+features = ['Joint_Angle', 'Angular_Velocity', 'Motion_Smoothness_Jerk', 'Feedback_Error']
+
+data = []
+for pid in range(n_patients):
+    # 30% chance of a bad recovery trajectory
+    bad_recovery = np.random.choice([0, 1], p=[0.7, 0.3])
+    
+    # Base starting metrics for day 1
+    base_angle = np.random.normal(55, 10)
+    base_vel = np.random.normal(14, 4)
+    base_jerk = np.random.normal(0.04, 0.01)
+    base_err = np.random.normal(4, 1.5)
+    
+    for d in range(1, days + 1):
+        # Add daily noise (representing natural day-to-day variance)
+        noise_angle = np.random.normal(0, 2)
+        noise_jerk = np.random.normal(0, 0.005)
+        
+        if bad_recovery:
+            # Trajectory degrades: angle restricts, jerk increases over 14 days
+            angle = base_angle - (d * np.random.normal(0.6, 0.2)) + noise_angle
+            jerk = base_jerk + (d * np.random.normal(0.004, 0.001)) + noise_jerk
+            vel = base_vel - (d * np.random.normal(0.3, 0.1)) 
+            err = base_err + (d * np.random.normal(0.4, 0.1)) 
+        else:
+            # Trajectory improves: angle opens up, jerk drops
+            angle = base_angle + (d * np.random.normal(0.3, 0.1)) + noise_angle
+            jerk = max(0.01, base_jerk - (d * np.random.normal(0.002, 0.001))) + noise_jerk
+            vel = base_vel + (d * np.random.normal(0.1, 0.05)) 
+            err = max(0, base_err - (d * np.random.normal(0.2, 0.1))) 
+            
+        data.append([f'P_{pid}', d, angle, vel, jerk, err, bad_recovery])
+
+df_14d = pd.DataFrame(data, columns=['Patient_ID', 'Day', 'Joint_Angle', 'Angular_Velocity', 'Motion_Smoothness_Jerk', 'Feedback_Error', 'Bad_Recovery'])
+
+# 2. Extract Longitudinal "Pattern Features" for Machine Learning
+patient_features = []
+for pid, group in df_14d.groupby('Patient_ID'):
+    row = {'Patient_ID': pid, 'Bad_Recovery': group['Bad_Recovery'].iloc[0]}
+    
+    for f in features:
+        vals = group[f].values
+        
+        # Pattern 1: Volatility over 14 days
+        row[f'{f}_std'] = np.std(vals)
+        # Pattern 2: Absolute change from Day 1 to Day 14
+        row[f'{f}_delta'] = vals[-1] - vals[0]
+        # Pattern 3: Linear trend (slope) over the 14 days
+        slope, _ = np.polyfit(np.arange(days), vals, 1)
+        row[f'{f}_trend_slope'] = slope
+        
+    patient_features.append(row)
+
+df_features = pd.DataFrame(patient_features)
+
+# 3. Train the Model on the Longitudinal Patterns
+X = df_features.drop(['Patient_ID', 'Bad_Recovery'], axis=1)
+y = df_features['Bad_Recovery']
+
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+clf = RandomForestClassifier(n_estimators=100, random_state=42)
+clf.fit(X_train, y_train)
+
+# 4. Evaluate and Extract Feature Importances
+importances = pd.DataFrame({
+    'Feature Pattern': X.columns,
+    'Importance': clf.feature_importances_
+}).sort_values(by='Importance', ascending=False)
+
+print("Top 14-Day Predictors of Bad Recovery:")
+print(importances.head(5))
