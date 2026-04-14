@@ -4,6 +4,8 @@
 
 PocketPal guides patients through daily check-ins, physical therapy exercises, and health monitoring — all wrapped in an engaging virtual companion experience. It provides clinicians and physical therapists with AI-powered clinical summaries and rehab analytics to support better care decisions.
 
+View our product demo: https://docs.google.com/presentation/d/1UBCnxqtw4bUFtfuNK_gyjROpWs-zGyabgTJrVGYBiX4/edit?usp=sharing!
+
 ---
 
 ## 🚀 Getting Started
